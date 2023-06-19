@@ -54,13 +54,7 @@ struct projectivePlane{
 	double jacobian[6]; // { du/dx, du/dy, du/dz, dv/dx, dv/dy, dv/dz }
 };
 
-void projectivePlane_update(projectivePlane* p, double dist, double phi, double psi) {
-	
-	p->cdist = dist;
-	if (dist < 0) p->cdist = 1;
-	p->cangle[0] = phi;
-	p->cangle[1] = psi;
-
+void projectivePlane_update(projectivePlane* p) {
 	// degeneracies exist when either psi or phi are multiples of (pi/2)
 	if (p->cangle[0] < 0.01) p->cangle[0] = 0.01;
 	if ((p->cangle[0] > 1.57) && (p->cangle[0] < 1.58)) p->cangle[0] = 1.58;
@@ -150,39 +144,65 @@ void map_R3_Screen(double* x, projectivePlane* pp,  int* frame) {
 int main()
 {
 	projectivePlane p;
-	projectivePlane_update(&p,7, 0, 0);
+	p.cangle[0] = 0;
+	p.cangle[1] = 0;
+	p.cdist = 5;
 	
 	HDC hdc = GetDC(GetConsoleWindow());
 	HDC buf = CreateCompatibleDC(hdc);
 	int* frameBuffer = (int*)calloc(1200*800, sizeof(COLORREF));
-	HBITMAP hbitmap;
 	
 	double x[3];
-	for (double i = 0; i < 1.57; i += 0.01) {
-		for (double j = 0; j < 6.28; j += 0.01) {
-			x[0] = sin(i);
-			x[1] = (2 * (1 - cos(j)) * sin(j)) * cos(i);
-			x[2] = (1 + 2 * (1 - cos(j)) * cos(j))*cos(i);
-			map_R3_Screen(x, &p, frameBuffer);
+	bool flag = 1;
+
+	while (1) {
+		if (flag) {
+			HBITMAP hbitmap;
+			for (int i = 0; i < 1200 * 800; i++) {
+				frameBuffer[i] = 0;
+			}
+			projectivePlane_update(&p);
+			flag = 0;
+			for (double i = 0; i < 6.28; i += 0.02) {
+				for (double j = 0; j < 6.28; j += 0.04) {
+					x[0] = cos(j) * (2 + cos(i));
+					x[1] = sin(j) * (2 + cos(i));
+					x[2] = sin(i);
+					map_R3_Screen(x, &p, frameBuffer);
+				}
+			}
+
+			hbitmap = CreateBitmap(1200, 800, 1, 32, (void*)frameBuffer);
+			SelectObject(buf, hbitmap);
+			BitBlt(hdc, 0, 0, 1200, 800, buf, 0, 0, SRCCOPY);
+			DeleteObject(hbitmap);
 		}
-	}
-	
-	hbitmap = CreateBitmap(1200, 800, 1, 32, (void*)frameBuffer);
-	SelectObject(buf, hbitmap);
-	BitBlt(hdc, 0, 0, 1200, 800, buf, 0, 0, SRCCOPY);
-	std::cout << "phi: " << p.cangle[0] << "\tpsi: " << p.cangle[1] << "\tdistance: " << p.cdist;
-	while (1);
-	
-	/*
-	std::cout << p.origin[0] << " " << p.origin[1] << " " << p.origin[2] << "\n";
-	std::cout << 400 * p.jacobian[0] << " " << 400 * p.jacobian[1] << " " << 400 * p.jacobian[2] << "\n";
-	std::cout << 400 * p.jacobian[3] << " " << 400 * p.jacobian[4] << " " << 400 * p.jacobian[5] << "\n";
-	std::cout << p.normal[0] << " " << p.normal[1] << " " << p.normal[2] << "\n";
-	std::cout << 400 * p.jacobian[0] * p.normal[0] +
-		400 * p.jacobian[1] * p.normal[1] + 400 * p.jacobian[2] * p.normal[2]<<"\t";
-	std::cout << 400 * p.jacobian[3] * p.normal[0] +
-		400 * p.jacobian[4] * p.normal[1] + 400 * p.jacobian[5] * p.normal[2] << "\t";
-	std::cout << 400 * p.jacobian[3] * p.jacobian[0] +
-		400 * p.jacobian[4] * p.jacobian[1] + 400 * p.jacobian[5] * p.jacobian[2];
-	*/
+
+		if (GetKeyState(VK_LEFT) & 0x8000) {
+			p.cangle[0] += 0.03;
+			flag = 1;
+		}
+		if (GetKeyState(VK_RIGHT) & 0x8000) {
+			p.cangle[0] -= 0.03;
+			flag = 1;
+		}
+		if (GetKeyState(VK_UP) & 0x8000) {
+			p.cangle[1] -= 0.03;
+			flag = 1;
+		}
+		if (GetKeyState(VK_DOWN) & 0x8000) {
+			p.cangle[1] += 0.03;
+			flag = 1;
+		}
+		if (GetKeyState('W') & 0x8000) {
+			if (p.cdist > 0.05) {
+				p.cdist -= 0.05;
+				flag = 1;
+			}
+		}
+		if (GetKeyState('S') & 0x8000) {
+			p.cdist += 0.05;
+			flag = 1;
+		}
+	};
 }
