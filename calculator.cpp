@@ -52,6 +52,7 @@ struct projectivePlane{
 	double origin[3];
 	double camera[3];
 	double jacobian[6]; // { du/dx, du/dy, du/dz, dv/dx, dv/dy, dv/dz }
+	double globalOffset[3];
 };
 
 void projectivePlane_update(projectivePlane* p) {
@@ -147,6 +148,9 @@ int main()
 	p.cangle[0] = 0;
 	p.cangle[1] = 0;
 	p.cdist = 5;
+	p.globalOffset[0] = 0;
+	p.globalOffset[1] = 0;
+	p.globalOffset[2] = 0;
 	
 	HDC hdc = GetDC(GetConsoleWindow());
 	HDC buf = CreateCompatibleDC(hdc);
@@ -165,9 +169,9 @@ int main()
 			flag = 0;
 			for (double i = 0; i < 6.28; i += 0.02) {
 				for (double j = 0; j < 6.28; j += 0.04) {
-					x[0] = cos(j) * (2 + cos(i));
-					x[1] = sin(j) * (2 + cos(i));
-					x[2] = sin(i);
+					x[0] = p.globalOffset[0] + cos(j) * (2 + cos(i));
+					x[1] = p.globalOffset[1] + sin(j) * (2 + cos(i));
+					x[2] = p.globalOffset[2] + sin(i);
 					map_R3_Screen(x, &p, frameBuffer);
 				}
 			}
@@ -202,6 +206,42 @@ int main()
 		}
 		if (GetKeyState('S') & 0x8000) {
 			p.cdist += 0.05;
+			flag = 1;
+		}
+		if (GetKeyState('E') & 0x8000) {
+			p.globalOffset[0] += 0.05;
+			flag = 1;
+		}
+		if (GetKeyState('R') & 0x8000) {
+			p.globalOffset[0] -= 0.05;
+			flag = 1;
+		}
+		if (GetKeyState('D') & 0x8000) {
+			p.globalOffset[1] += 0.05;
+			flag = 1;
+		}
+		if (GetKeyState('F') & 0x8000) {
+			p.globalOffset[1] -= 0.05;
+			flag = 1;
+		}
+		if (GetKeyState('X') & 0x8000) {
+			p.globalOffset[2] += 0.05;
+			flag = 1;
+		}
+		if (GetKeyState('C') & 0x8000) {
+			p.globalOffset[2] -= 0.05;
+			flag = 1;
+		}
+		if (GetKeyState('Q') & 0x8000) {
+			p.globalOffset[0] = 0;
+			p.globalOffset[1] = 0;
+			p.globalOffset[2] = 0;
+			flag = 1;
+		}
+		if (GetKeyState('A') & 0x8000) {
+			p.cangle[0] = 0;
+			p.cangle[1] = 0;
+			p.cdist = 5;
 			flag = 1;
 		}
 	};
