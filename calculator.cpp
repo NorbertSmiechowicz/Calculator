@@ -44,98 +44,145 @@ double integral_line(double t0, double t1, double (**f)(double* x), double (**x)
 	return s;
 }
 
+struct projectivePlane{
+	// 1200 x 800 / => du * dx = 400
+	double cdist;
+	double cangle[2];	// 0 < cangle[0] < 2pi  -pi/2 < cangle[1] < pi/2
+	double normal[3];
+	double origin[3];
+	double camera[3];
+	double jacobian[6]; // { du/dx, du/dy, du/dz, dv/dx, dv/dy, dv/dz }
+};
 
-unsigned int map_R3_R3embdPlane(double* x, double* p, double* y) {
-	// plane eq: (p - p0) dot n = 0
-	// p(arameters): 0,1,2 - point on the plane; 3,4,5 - normal vector; 6,7,8 - camera
-	double d = (p[0] - x[0]) * p[3] + (p[1] - x[1]) * p[4] + (p[2] - x[2]) * p[5];
-	y[0] = p[6] - x[0];
-	y[1] = p[7] - x[1];
-	y[2] = p[8] - x[2];
-	d = d / (y[0] * p[3] + y[1] * p[4] + y[2] * p[5]);
-	y[0] *= d;
-	y[1] *= d;
-	y[2] *= d;
-	d = y[0] * y[0] + y[1] * y[1] + y[2] * y[2];
-	y[0] += x[0];
-	y[1] += x[1];
-	y[2] += x[2];
-	//y is now a point on the embedded plane in R3
-	//d is distance squared to the porjective plane
-	return (int)d;
-}
-void map_R3embdPlane_frameBuffer(double* x, double* p, unsigned int d, int* fb) {
-	// p(arameters) : 0,1 - local origin in x,y; 2,3,4,5 - [du/dx]
-	double u = p[2] * (x[0] - p[0]) + p[3] * (x[1] - p[1]);
-	double v = p[4] * (x[0] - p[0]) + p[5] * (x[1] - p[1]);
-	if (u < 0) return;
-	if (v < 0) return;
-	if (u > 1280.0) return;
-	if (v > 720.0) return;
-	int temp = (int)u + ((int)v * 1280.0);
-	//if(d<fb[temp]) fb[temp] = d & 0xFFFFFF;
-	fb[temp] = 0xFFFFFF;
-}
-void map_R2_R3(double* x, double (**f)(double* x), double* y) {
-	y[0] = f[0](x);
-	y[1] = f[1](x);
-	y[2] = f[2](x);
+void projectivePlane_update(projectivePlane* p, double dist, double phi, double psi) {
+	
+	p->cdist = dist;
+	if (dist < 0) p->cdist = 1;
+	p->cangle[0] = phi;
+	p->cangle[1] = psi;
+
+	// degeneracies exist when either psi or phi are multiples of (pi/2)
+	if (p->cangle[0] < 0.01) p->cangle[0] = 0.01;
+	if ((p->cangle[0] > 1.57) && (p->cangle[0] < 1.58)) p->cangle[0] = 1.58;
+	if ((p->cangle[0] > 3.14) && (p->cangle[0] < 3.15)) p->cangle[0] = 3.15;
+	if ((p->cangle[0] > 4.71) && (p->cangle[0] < 4.72)) p->cangle[0] = 4.72;
+	if (p->cangle[0] > 6.28) p->cangle[0] = 6.28;
+
+	if (p->cangle[1] < -1.57) p->cangle[1] = -1.57;
+	if ((p->cangle[1] > -0.01) && (p->cangle[1] < 0.01)) p->cangle[1] = 0.01;
+	if (p->cangle[1] > 1.57) p->cangle[1] = 1.57;
+
+	// temporarily, camera only looks at 0 
+	// if updated, then coordinate functions change
+	p->normal[0] = cos(p->cangle[0]) * cos(p->cangle[1]);
+	p->normal[1] = sin(p->cangle[0]) * cos(p->cangle[1]);
+	p->normal[2] = sin(p->cangle[1]);
+
+	p->jacobian[0] = -sin(p->cangle[0]);
+	p->jacobian[1] = cos(p->cangle[0]);
+	p->jacobian[2] = 0;
+	p->jacobian[3] = cos(p->cangle[0]) * sin(p->cangle[1]);
+	p->jacobian[4] = sin(p->cangle[0]) * sin(p->cangle[1]);
+	p->jacobian[5] = -cos(p->cangle[1]);
+
+	// origin is 2 global units towards global origin starting from camera,
+	// then 1.5 global units in direction of - du,
+	// then 1 global units in the direction of -dv
+	// assuming 3x2 global unit plane, camera is now in center
+	p->camera[0] = p->cdist * p->normal[0];
+	p->camera[1] = p->cdist * p->normal[1];
+	p->camera[2] = p->cdist * p->normal[2];
+
+	p->origin[0] = p->camera[0] - p->normal[0] - p->normal[0];
+	p->origin[1] = p->camera[1] - p->normal[1] - p->normal[1];
+	p->origin[2] = p->camera[2] - p->normal[2] - p->normal[2];
+
+	p->origin[0] -= 1.5*p->jacobian[0];
+	p->origin[1] -= 1.5*p->jacobian[1];
+
+	p->origin[0] -= p->jacobian[3];
+	p->origin[1] -= p->jacobian[4];
+	p->origin[2] -= p->jacobian[5];
+	
+	p->jacobian[0] *= 400;
+	p->jacobian[1] *= 400;
+	p->jacobian[3] *= 400;
+	p->jacobian[4] *= 400;
+	p->jacobian[5] *= 400;
 }
 
+void map_R3_Screen(double* x, projectivePlane* pp,  int* frame) {
 
-/*
-double f_torus_x(double* x) {
-	return cos(x[0]);// *(3 + cos(x[1]));
-}
-double f_torus_y(double* x) {
-	return sin(x[0]);// *(3 + cos(x[1]));
-}
-double f_torus_z(double* x) {
-	return 0.0;
-}
-*/
-double f_torus_x(double* x) {
-	return cos(x[0])*cos(x[1]);
-}
-double f_torus_y(double* x) {
-	return sin(x[0])*cos(x[1]);
-}
-double f_torus_z(double* x) {
-	return sin(x[1]);
+	double l[3];
+	l[0] = pp->camera[0] - x[0];
+	l[1] = pp->camera[1] - x[1];
+	l[2] = pp->camera[2] - x[2];
+	double d = (pp->origin[0] - x[0]) * pp->normal[0];
+	d += (pp->origin[1] - x[1]) * pp->normal[1];
+	d += (pp->origin[2] - x[2]) * pp->normal[2];
+	d = d/( l[0] * pp->normal[0] + l[1] * pp->normal[1] + l[2] * pp->normal[2] );
+	l[0] *= d;
+	l[1] *= d;
+	l[2] *= d;
+	d = l[0] * l[0] + l[1] * l[1] + l[2] * l[2] + 0.1;
+	d = 255 / d;
+	l[0] += x[0];
+	l[1] += x[1];
+	l[2] += x[2];
+	// l is a point on the projection plane
+	// convert to a tangent vector on the projection plane d/dx
+	// then vector components are 1 forms dx
+	// since there is a trivial linear map from TpP to ToP
+	// substitute dz as zp - zo and the structre is preserved;
+	l[0] = l[0] - pp->origin[0];
+	l[1] = l[1] - pp->origin[1];
+	l[2] = l[2] - pp->origin[2];
+	// du = du/dx dx + du/dy dy + du/dz dz
+	x[0] = l[0] * pp->jacobian[0] + l[1] * pp->jacobian[1]; 
+	x[1] = l[0] * pp->jacobian[3] + l[1] * pp->jacobian[4] + l[2] * pp->jacobian[5];
+	if (x[0] > 1200) return;
+	if (x[0] < 0) return;
+	if (x[1] > 800) return;
+	if (x[1] < 0) return;
+	frame[(int)x[0]+ 1200 * (int)x[1]] = 0xFF0080;
 }
 
 int main()
 {
-	double z = 0;
-	double (*fn[3])(double* x);
-	fn[0] = f_torus_x;
-	fn[1] = f_torus_y;
-	fn[2] = f_torus_z;
-
-	double x[3] = { 0,0,2 };
-	double projPlane[9] = { 0,0,-2,0,0,1,1,1,-1 };
-	double y[3] = { 0,0,0 };
-
-	double transfromPlane[6] = {-1.5,4,720/4,0,0,-720/4};
-	unsigned int d = 0;
-
+	projectivePlane p;
+	projectivePlane_update(&p,7, 0, 0);
+	
 	HDC hdc = GetDC(GetConsoleWindow());
 	HDC buf = CreateCompatibleDC(hdc);
-	COLORREF* frameBuffer = (COLORREF*)calloc(1280*720, sizeof(COLORREF));
+	int* frameBuffer = (int*)calloc(1200*800, sizeof(COLORREF));
 	HBITMAP hbitmap;
 	
-	for (double i = 0; i < 3.1425; i += 0.005) {
-		for (double j = 0; j < 3.1425; j += 0.005) {
-			y[0] = i;
-			y[1] = j;
-			map_R2_R3(y,fn,x);
-			d = map_R3_R3embdPlane(x,projPlane,y);
-			map_R3embdPlane_frameBuffer(y, transfromPlane, d, (int*)frameBuffer);
+	double x[3];
+	for (double i = 0; i < 1.57; i += 0.01) {
+		for (double j = 0; j < 6.28; j += 0.01) {
+			x[0] = sin(i);
+			x[1] = (2 * (1 - cos(j)) * sin(j)) * cos(i);
+			x[2] = (1 + 2 * (1 - cos(j)) * cos(j))*cos(i);
+			map_R3_Screen(x, &p, frameBuffer);
 		}
 	}
-
-	hbitmap = CreateBitmap(1280, 720, 1, 32, (void*)frameBuffer);
+	
+	hbitmap = CreateBitmap(1200, 800, 1, 32, (void*)frameBuffer);
 	SelectObject(buf, hbitmap);
-	BitBlt(hdc, 0, 0, 1280, 720, buf, 0, 0, SRCCOPY);
+	BitBlt(hdc, 0, 0, 1200, 800, buf, 0, 0, SRCCOPY);
+	std::cout << "phi: " << p.cangle[0] << "\tpsi: " << p.cangle[1] << "\tdistance: " << p.cdist;
 	while (1);
+	
+	/*
+	std::cout << p.origin[0] << " " << p.origin[1] << " " << p.origin[2] << "\n";
+	std::cout << 400 * p.jacobian[0] << " " << 400 * p.jacobian[1] << " " << 400 * p.jacobian[2] << "\n";
+	std::cout << 400 * p.jacobian[3] << " " << 400 * p.jacobian[4] << " " << 400 * p.jacobian[5] << "\n";
+	std::cout << p.normal[0] << " " << p.normal[1] << " " << p.normal[2] << "\n";
+	std::cout << 400 * p.jacobian[0] * p.normal[0] +
+		400 * p.jacobian[1] * p.normal[1] + 400 * p.jacobian[2] * p.normal[2]<<"\t";
+	std::cout << 400 * p.jacobian[3] * p.normal[0] +
+		400 * p.jacobian[4] * p.normal[1] + 400 * p.jacobian[5] * p.normal[2] << "\t";
+	std::cout << 400 * p.jacobian[3] * p.jacobian[0] +
+		400 * p.jacobian[4] * p.jacobian[1] + 400 * p.jacobian[5] * p.jacobian[2];
+	*/
 }
