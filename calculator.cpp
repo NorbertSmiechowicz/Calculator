@@ -1,6 +1,8 @@
 #include <iostream>
 #include <Windows.h>
 #include <math.h>
+#include <chrono>
+#include <thread>
 
 double derivative(double x, double (*f)(double x), unsigned char order) {
 	if (order == 0) return f(x);
@@ -106,7 +108,76 @@ void projectivePlane_update(projectivePlane* p) {
 	p->jacobian[5] *= 400;
 }
 
-void map_R3_Screen(double* x, projectivePlane* pp,  int* frame) {
+bool projectivePlane_move(projectivePlane* p) {
+	bool flag = 0;
+	if (GetKeyState(VK_LEFT) & 0x8000) {
+		p->cangle[0] += 0.03;
+		flag = 1;
+	}
+	if (GetKeyState(VK_RIGHT) & 0x8000) {
+		p->cangle[0] -= 0.03;
+		flag = 1;
+	}
+	if (GetKeyState(VK_UP) & 0x8000) {
+		p->cangle[1] += 0.03;
+		flag = 1;
+	}
+	if (GetKeyState(VK_DOWN) & 0x8000) {
+		p->cangle[1] -= 0.03;
+		flag = 1;
+	}
+	if (GetKeyState('W') & 0x8000) {
+		if (p->cdist > 0.05) {
+			p->cdist -= 0.05;
+			flag = 1;
+		}
+	}
+	if (GetKeyState('S') & 0x8000) {
+		p->cdist += 0.05;
+		flag = 1;
+	}
+	/*
+	if (GetKeyState('E') & 0x8000) {
+		p->globalOffset[0] += 0.05;
+		flag = 1;
+	}
+	if (GetKeyState('R') & 0x8000) {
+		p->globalOffset[0] -= 0.05;
+		flag = 1;
+	}
+	if (GetKeyState('D') & 0x8000) {
+		p->globalOffset[1] += 0.05;
+		flag = 1;
+	}
+	if (GetKeyState('F') & 0x8000) {
+		p->globalOffset[1] -= 0.05;
+		flag = 1;
+	}
+	if (GetKeyState('X') & 0x8000) {
+		p->globalOffset[2] += 0.05;
+		flag = 1;
+	}
+	if (GetKeyState('C') & 0x8000) {
+		p->globalOffset[2] -= 0.05;
+		flag = 1;
+	}
+	if (GetKeyState('Q') & 0x8000) {
+		p->globalOffset[0] = 0;
+		p->globalOffset[1] = 0;
+		p->globalOffset[2] = 0;
+		flag = 1;
+	}
+	*/
+	if (GetKeyState('A') & 0x8000) {
+		p->cangle[0] = 0;
+		p->cangle[1] = 0;
+		p->cdist = 5;
+		flag = 1;
+	}
+	return flag;
+}
+
+void projectivePlane_map_fromR3(double* x, projectivePlane* pp,  int* frame) {
 
 	double l[3];
 	l[0] = pp->camera[0] - x[0];
@@ -119,8 +190,8 @@ void map_R3_Screen(double* x, projectivePlane* pp,  int* frame) {
 	l[0] *= d;
 	l[1] *= d;
 	l[2] *= d;
-	d = l[0] * l[0] + l[1] * l[1] + l[2] * l[2] + 0.1;
-	d = 255 / d;
+	//d = l[0] * l[0] + l[1] * l[1] + l[2] * l[2] + 0.1;
+	//d = 255 / sqrt(d+1);
 	l[0] += x[0];
 	l[1] += x[1];
 	l[2] += x[2];
@@ -133,13 +204,14 @@ void map_R3_Screen(double* x, projectivePlane* pp,  int* frame) {
 	l[1] = l[1] - pp->origin[1];
 	l[2] = l[2] - pp->origin[2];
 	// du = du/dx dx + du/dy dy + du/dz dz
-	x[0] = l[0] * pp->jacobian[0] + l[1] * pp->jacobian[1]; 
-	x[1] = l[0] * pp->jacobian[3] + l[1] * pp->jacobian[4] + l[2] * pp->jacobian[5];
-	if (x[0] > 1200) return;
-	if (x[0] < 0) return;
-	if (x[1] > 800) return;
-	if (x[1] < 0) return;
-	frame[(int)x[0]+ 1200 * (int)x[1]] = 0xFF0080;
+	double xx[2];
+	xx[0] = l[0] * pp->jacobian[0] + l[1] * pp->jacobian[1]; 
+	xx[1] = l[0] * pp->jacobian[3] + l[1] * pp->jacobian[4] + l[2] * pp->jacobian[5];
+	if (xx[0] > 1200) return;
+	if (xx[0] < 0) return;
+	if (xx[1] > 800) return;
+	if (xx[1] < 0) return;
+	frame[(int)xx[0]+ 1200 * (int)xx[1]] = 0xa8aF08;
 }
 
 int main()
@@ -154,95 +226,60 @@ int main()
 	
 	HDC hdc = GetDC(GetConsoleWindow());
 	HDC buf = CreateCompatibleDC(hdc);
-	int* frameBuffer = (int*)calloc(1200*800, sizeof(COLORREF));
-	
-	double x[3];
-	bool flag = 1;
+	double** points;
+	points = (double**)calloc(157*315, sizeof(double*));
+	for (int i = 0; i < 157 * 315; i++) {
+		points[i] = (double*)calloc(3, sizeof(double));
+	}
+
+	bool flag0 = 1;
+	bool flag1 = 1;
+
+
+	std::chrono::high_resolution_clock::time_point t1;
+	std::chrono::high_resolution_clock::time_point t2;
+
 
 	while (1) {
-		if (flag) {
-			HBITMAP hbitmap;
-			for (int i = 0; i < 1200 * 800; i++) {
-				frameBuffer[i] = 0;
-			}
-			projectivePlane_update(&p);
-			flag = 0;
+		std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
+		if (flag0) {
+			flag0 = 0;
+			int ip = 0;
 			for (double i = 0; i < 6.28; i += 0.02) {
 				for (double j = 0; j < 6.28; j += 0.04) {
-					x[0] = p.globalOffset[0] + cos(j) * (2 + cos(i));
-					x[1] = p.globalOffset[1] + sin(j) * (2 + cos(i));
-					x[2] = p.globalOffset[2] + sin(i);
-					map_R3_Screen(x, &p, frameBuffer);
+					/*
+					points[ip][0] = cos(j) * (2 + cos(i));
+					points[ip][1] = sin(j) * (2 + cos(i));
+					points[ip][2] = sin(i);
+					*/
+					points[ip][0] = cos(j) * (cos(i));
+					points[ip][1] = sin(j) * (cos(i));
+					points[ip][2] = sin(i);
+					ip++;
 				}
+			}
+		}
+
+		if (flag1) {
+			int* frameBuffer = (int*)calloc(1200*800,4);
+			HBITMAP hbitmap;
+
+			projectivePlane_update(&p);
+			flag1 = 0;
+			
+			for (int i = 0; i < 157 * 315; i++) {
+				projectivePlane_map_fromR3(points[i],&p,frameBuffer);
 			}
 
 			hbitmap = CreateBitmap(1200, 800, 1, 32, (void*)frameBuffer);
 			SelectObject(buf, hbitmap);
 			BitBlt(hdc, 0, 0, 1200, 800, buf, 0, 0, SRCCOPY);
 			DeleteObject(hbitmap);
+			free(frameBuffer);
 		}
+		flag1 = projectivePlane_move(&p);
 
-		if (GetKeyState(VK_LEFT) & 0x8000) {
-			p.cangle[0] += 0.03;
-			flag = 1;
-		}
-		if (GetKeyState(VK_RIGHT) & 0x8000) {
-			p.cangle[0] -= 0.03;
-			flag = 1;
-		}
-		if (GetKeyState(VK_UP) & 0x8000) {
-			p.cangle[1] -= 0.03;
-			flag = 1;
-		}
-		if (GetKeyState(VK_DOWN) & 0x8000) {
-			p.cangle[1] += 0.03;
-			flag = 1;
-		}
-		if (GetKeyState('W') & 0x8000) {
-			if (p.cdist > 0.05) {
-				p.cdist -= 0.05;
-				flag = 1;
-			}
-		}
-		if (GetKeyState('S') & 0x8000) {
-			p.cdist += 0.05;
-			flag = 1;
-		}
-		if (GetKeyState('E') & 0x8000) {
-			p.globalOffset[0] += 0.05;
-			flag = 1;
-		}
-		if (GetKeyState('R') & 0x8000) {
-			p.globalOffset[0] -= 0.05;
-			flag = 1;
-		}
-		if (GetKeyState('D') & 0x8000) {
-			p.globalOffset[1] += 0.05;
-			flag = 1;
-		}
-		if (GetKeyState('F') & 0x8000) {
-			p.globalOffset[1] -= 0.05;
-			flag = 1;
-		}
-		if (GetKeyState('X') & 0x8000) {
-			p.globalOffset[2] += 0.05;
-			flag = 1;
-		}
-		if (GetKeyState('C') & 0x8000) {
-			p.globalOffset[2] -= 0.05;
-			flag = 1;
-		}
-		if (GetKeyState('Q') & 0x8000) {
-			p.globalOffset[0] = 0;
-			p.globalOffset[1] = 0;
-			p.globalOffset[2] = 0;
-			flag = 1;
-		}
-		if (GetKeyState('A') & 0x8000) {
-			p.cangle[0] = 0;
-			p.cangle[1] = 0;
-			p.cdist = 5;
-			flag = 1;
-		}
-	};
+		std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+		std::this_thread::sleep_for(std::chrono::microseconds(16666) - (t2 - t1));
+	}
 }
