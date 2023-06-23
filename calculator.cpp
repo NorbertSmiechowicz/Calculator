@@ -197,9 +197,8 @@ void projectivePlane_map_fromR3(double* x, projectivePlane* pp,  int* frame) {
 	l[2] += x[2];
 	// l is a point on the projection plane
 	// convert to a tangent vector on the projection plane d/dx
-	// then vector components are 1 forms dx
-	// since there is a trivial linear map from TpP to ToP
-	// substitute dz as zp - zo and the structre is preserved;
+	// then vector components are 1 forms
+	// substitute dz as zp - zo
 	l[0] = l[0] - pp->origin[0];
 	l[1] = l[1] - pp->origin[1];
 	l[2] = l[2] - pp->origin[2];
