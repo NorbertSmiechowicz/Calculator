@@ -1,4 +1,4 @@
-﻿#include <iostream>
+#include <iostream>
 #include <windows.h>
 #include <chrono>
 #include <thread>
@@ -110,38 +110,6 @@ bool projectivePlane_move(projectivePlane* p) {
 		p->cdist += 0.05;
 		flag = 1;
 	}
-	/*
-	if (GetKeyState('E') & 0x8000) {
-		p->globalOffset[0] += 0.05;
-		flag = 1;
-	}
-	if (GetKeyState('R') & 0x8000) {
-		p->globalOffset[0] -= 0.05;
-		flag = 1;
-	}
-	if (GetKeyState('D') & 0x8000) {
-		p->globalOffset[1] += 0.05;
-		flag = 1;
-	}
-	if (GetKeyState('F') & 0x8000) {
-		p->globalOffset[1] -= 0.05;
-		flag = 1;
-	}
-	if (GetKeyState('X') & 0x8000) {
-		p->globalOffset[2] += 0.05;
-		flag = 1;
-	}
-	if (GetKeyState('C') & 0x8000) {
-		p->globalOffset[2] -= 0.05;
-		flag = 1;
-	}
-	if (GetKeyState('Q') & 0x8000) {
-		p->globalOffset[0] = 0;
-		p->globalOffset[1] = 0;
-		p->globalOffset[2] = 0;
-		flag = 1;
-	}
-	*/
 	if (GetKeyState('A') & 0x8000) {
 		p->cangle[0] = 0;
 		p->cangle[1] = 0;
@@ -207,12 +175,12 @@ void screen_drawLine(double* a, double* b, int* frame) {
 
 void hex_draw(double* a, int* frame) {
 
-	//		  8		14
-	//		6	  10
-	// 
-	//		  4		12
-	//		0     2
-	//
+//    8		  14
+//	6		10
+// 
+//	  4		  12
+//	0		2
+//
 
 	screen_drawLine(a, a + 2, frame);
 	screen_drawLine(a, a + 4, frame);
@@ -258,29 +226,13 @@ int main()
 	HDC hdc = GetDC(GetConsoleWindow());
 	HDC buf = CreateCompatibleDC(hdc);
 
-	/*
-	double** points;
-	points = (double**)calloc(157 * 315, sizeof(double*));
-	for (int i = 0; i < 157 * 315; i++) {
-		points[i] = (double*)calloc(3, sizeof(double));
-	}
-
-	bool flag0 = 1;
-	bool flag1 = 1;
-	*/
-
 	std::chrono::high_resolution_clock::time_point t1;
 	std::chrono::high_resolution_clock::time_point t2;
 
 	int* frameBuffer = (int*)calloc(1024 * 683, 4);
 	HBITMAP hbitmap;
 
-	p.cangle[0] = 0.5;
-	p.cangle[1] = 0.4;
-	p.cdist = 3;
 	projectivePlane_update(&p);
-
-
 	double hexah[16];
 
 	bool flag1 = 1;
